@@ -1,0 +1,267 @@
+WITH census_data AS (
+    SELECT
+        LEFT(a.CENSUS_BLOCK_GROUP, 11) AS census_tract,
+
+        -- Education
+        SUM(a."B15002e1")  AS total_population_25plus,
+        SUM(a."B15002e15") AS male_bachelors_degree,
+        SUM(a."B15002e32") AS female_bachelors_degree,
+        CASE
+            WHEN SUM(a."B15002e1") > 0
+            THEN 100.0 * (SUM(a."B15002e15") + SUM(a."B15002e32"))
+                 / SUM(a."B15002e1")
+        END AS pct_bachelors_degree,
+
+        -- Race / Ethnicity
+        SUM(c."B03002e1") AS total_population,
+        SUM(c."B03002e3") AS non_hispanic_white_population,
+        CASE
+            WHEN SUM(c."B03002e1") > 0
+            THEN 100.0 * SUM(c."B03002e3")
+                 / SUM(c."B03002e1")
+        END AS pct_white,
+
+        -- Earnings (averages of BG medians)
+        AVG(d."B20002e1") AS median_earnings_total,
+        AVG(d."B20002e2") AS median_earnings_male,
+        AVG(d."B20002e3") AS median_earnings_female,
+
+        -- Household Income
+        AVG(income."B19013e1") AS median_household_income,
+
+        -- Housing characteristics
+        AVG(b25."B25077e1") AS median_home_value,
+        AVG(b25."B25064e1") AS median_gross_rent,
+
+        SUM(b25."B25003e2") AS owner_occupied_units,
+        SUM(b25."B25003e3") AS renter_occupied_units,
+        CASE
+            WHEN SUM(b25."B25003e1") > 0
+            THEN 100.0 * SUM(b25."B25003e2")
+                 / SUM(b25."B25003e1")
+        END AS pct_owner_occupied,
+
+        SUM(b25."B25002e2") AS occupied_units,
+        SUM(b25."B25002e3") AS vacant_units,
+
+        -- Demographics
+        AVG(age."B01002e1") AS median_age,
+
+        -- Employment
+        SUM(employment."B23025e3") AS civilian_employed,
+        SUM(employment."B23025e5") AS civilian_unemployed,
+        CASE
+            WHEN (SUM(employment."B23025e3") + SUM(employment."B23025e5")) > 0
+            THEN 100.0 * SUM(employment."B23025e5")
+                 / (SUM(employment."B23025e3") + SUM(employment."B23025e5"))
+        END AS unemployment_rate,
+
+        -- Poverty (temporarily disabled: column name mismatch in 2019_CBG_B17)
+        CAST(NULL AS NUMBER) AS population_below_poverty,
+        CAST(NULL AS FLOAT)  AS poverty_rate
+
+    FROM US_OPEN_CENSUS_DATA__NEIGHBORHOOD_INSIGHTS__FREE_DATASET.PUBLIC."2019_CBG_B15" a
+    LEFT JOIN US_OPEN_CENSUS_DATA__NEIGHBORHOOD_INSIGHTS__FREE_DATASET.PUBLIC."2019_CBG_B03" c
+        ON a.CENSUS_BLOCK_GROUP = c.CENSUS_BLOCK_GROUP
+    LEFT JOIN US_OPEN_CENSUS_DATA__NEIGHBORHOOD_INSIGHTS__FREE_DATASET.PUBLIC."2019_CBG_B20" d
+        ON a.CENSUS_BLOCK_GROUP = d.CENSUS_BLOCK_GROUP
+    LEFT JOIN US_OPEN_CENSUS_DATA__NEIGHBORHOOD_INSIGHTS__FREE_DATASET.PUBLIC."2019_CBG_B19" income
+        ON a.CENSUS_BLOCK_GROUP = income.CENSUS_BLOCK_GROUP
+    LEFT JOIN US_OPEN_CENSUS_DATA__NEIGHBORHOOD_INSIGHTS__FREE_DATASET.PUBLIC."2019_CBG_B25" b25
+        ON a.CENSUS_BLOCK_GROUP = b25.CENSUS_BLOCK_GROUP
+    LEFT JOIN US_OPEN_CENSUS_DATA__NEIGHBORHOOD_INSIGHTS__FREE_DATASET.PUBLIC."2019_CBG_B01" age
+        ON a.CENSUS_BLOCK_GROUP = age.CENSUS_BLOCK_GROUP
+    LEFT JOIN US_OPEN_CENSUS_DATA__NEIGHBORHOOD_INSIGHTS__FREE_DATASET.PUBLIC."2019_CBG_B23" employment
+        ON a.CENSUS_BLOCK_GROUP = employment.CENSUS_BLOCK_GROUP
+    LEFT JOIN US_OPEN_CENSUS_DATA__NEIGHBORHOOD_INSIGHTS__FREE_DATASET.PUBLIC."2019_CBG_B17" poverty
+        ON a.CENSUS_BLOCK_GROUP = poverty.CENSUS_BLOCK_GROUP
+
+    WHERE LEFT(a.CENSUS_BLOCK_GROUP, 2) = '37'  -- NC state FIPS
+    GROUP BY 1
+)
+
+SELECT
+    -- Primary identifiers
+    img.CC_LIST_ID,
+    img.PROPERTY_ID,
+
+    -- Property data from ASSESSOR
+    p.PROPERTYID AS property_id,
+    p.CURRENTSALESPRICE AS sale_price,
+    p.CURRENTSALERECORDINGDATE AS sale_date,
+    p.YEARBUILT AS year_built,
+    p.EFFECTIVEYEARBUILT AS effective_year_built,
+    p.SITUSLATITUDE AS latitude,
+    p.SITUSLONGITUDE AS longitude,
+    p.SITUSSTATE AS state,
+    p.SITUSCITY AS city,
+    p.SITUSZIP5 AS zip,
+    p.SITUSCENSUSTRACT AS census_tract,
+    p.SUMLIVINGAREASQFT AS living_sqft,
+    p.LOTSIZESQFT AS lot_sqft,
+    p.BEDROOMS AS bedrooms,
+    p.BATHFULL AS full_baths,
+    p.BATHSPARTIALNBR AS half_baths,
+    p.GARAGEPARKINGNBR AS garage_spaces,
+    p.FIREPLACECODE AS fireplace_code,
+
+    -- Image condition scores
+    img.GRAN_C_IN,
+    img.GRAN_C_EX,
+    img.GRAN_C,
+    img.HIGH_C_IN,
+    img.HIGH_C_EX,
+    img.HIGH_C,
+
+    -- All 300 image boolean features
+    img.WOOD_FLOORS, img.CEIL_FAN, img.CARPETED_FLOOR, img.NEUTRAL_PAINT, img.WOOD_FLOOR,
+    img.TILE_FLOOR, img.NEUTRAL_FIN, img.NAT_LIGHT, img.AMPLE_NAT_LIGHT, img.NAT_LIGHT_1,
+    img.MATURE_TREES, img.GRAN_COUNTER, img.NAT_LIGHT_FROM_WINDOW, img.SS_STEEL_APPL,
+    img.FIREPLACE, img.RECESSED_LIGHT, img.CARPETED_FLOOR_1, img.CARPETED_FLOORS,
+    img.LARGE_WINDOWS, img.WHITE_CABINETRY, img.WOOD_CABINETS, img.COVERED_FRONT_PORCH,
+    img.VAULTED_CEIL, img.ATTACHED_TWOCAR_GARAGE, img.CHANDELIER_LIGHT, img.CARPET_FLOOR,
+    img.NEUTRAL_DECOR, img.FENCED_YARD, img.TILE_FLOOR_1, img.CHANDELIER, img.COMPACT_LAYOUT,
+    img.MATURE_LANDSCAPING, img.DOUBLE_VANITY, img.LARGE_WINDOW, img.FORMAL_DINING_AREA,
+    img.TUBSHOWER_COMBO, img.CURB_APPEAL, img.UPD_FIXTURES, img.ATTACHED_GARAGE, img.DRIVEWAY,
+    img.MOD_FIXTURES, img.WELLMAINTAINED_LAWN, img.STANDARD_FIXTURES, img.FIREPLACE_MANTEL,
+    img.LIGHT, img.LARGE_MIRROR, img.BUILTIN_SHELVING, img.PENDANT_LIGHT, img.SINGLE_VANITY,
+    img.NEUTRAL_WALLS, img.NAT_LIGHT_FROM_WINDOWS, img.CURB_APPEAL_1, img.CROWN_MOLDING,
+    img.WINDOW_FOR_NAT_LIGHT, img.OPEN_FLOOR_PLAN, img.BRICK_FACADE, img.BRICK_EXTERIOR,
+    img.SS_APPL, img.NEUTRAL_PAINT_TRIM, img.LAMINATE_COUNTER, img.TILE_BACKSPLASH,
+    img.LANDSCAPED_BEDS, img.AMPLE_CABINETRY, img.SINGLE_WINDOW, img.GRAN_COUNTERS,
+    img.NEUTRAL_WALL_COLOR, img.MULTIPLE_WINDOWS, img.TILED_FLOOR, img.CONCRETE_DRIVEWAY,
+    img.OUTDOOR_SEATING_AREA, img.SINGLESINK_VANITY, img.NEUTRAL_CARPET,
+    img.WELLMAINTAINED_LANDSCAPING, img.LARGE_WINDOWSNATURAL_LIGHT, img.DOUBLE_SINK,
+    img.PEDESTAL_SINK, img.WOOD_CABINETRY, img.LARGE_WINDOW_NAT_LIGHT, img.VINYL_SIDING,
+    img.VINYLTILE_FLOOR, img.OPEN_PLAN_TO_KITCH, img.SMALL_FOOTPRINT, img.TILE_SURROUND,
+    img.SS_REFRIGERATOR, img.GRAN_COUNTERTOP, img.COMPACT_FOOTPRINT, img.OPEN_LAYOUT,
+    img.HIGH_CEILINGS, img.MATURE_TREESLANDSCAPING, img.STRONG_CURB_APPEAL, img.KITCH_ISLAND,
+    img.SPACIOUS_LAYOUT, img.LAMINATE_FLOOR, img.WINDOW_PROVIDING_NAT_LIGHT,
+    img.SINGLE_SINK_VANITY, img.ABUNDANT_NAT_LIGHT, img.CONCRETE_FLOOR,
+    img.AMPLE_COUNTER_SPACE, img.UPD_CABINETRY, img.PRIVACY_FENCE, img.TWOCAR_GARAGE,
+    img.DOUBLE_SINK_VANITY, img.BLACK_APPL, img.DISHWASHER_PRESENT,
+    img.LARGE_WINDOWNATURAL_LIGHT, img.LARGE_WINDOWS_NAT_LIGHT, img.TRAY_CEIL,
+    img.STORAGE_SHED, img.OAK_CABINETRY, img.STANDARD_BED_SIZE, img.WOODLOOK_FLOOR,
+    img.OUTDOOR_SEATING, img.OAK_CABINETS, img.LARGE_WINDOW_NAT_LIGHT_1, img.BRICK_FIREPLACE,
+    img.WELLMAINTAINED_FIN, img.LEVEL_LAWN, img.WINDOW_BLINDS, img.DRIVEWAY_ACCESS,
+    img.LARGE_WINDOWS_NAT_LIGHT_1, img.GLASSENCLOSED_SHOWER, img.VINYL_FLOOR,
+    img.BRIGHT_NAT_LIGHT, img.CARPETED_BED, img.PAVED_DRIVEWAY, img.VINYL_SIDING_EXTERIOR,
+    img.SS_STEEL_REFRIGERATOR, img.AMPLE_CABINET_STORAGE, img.WINDOW_NAT_LIGHT,
+    img.WOOD_FLOOR_1, img.ADJACENT_TO_KITCH, img.FORMAL_DINING_ROOM,
+    img.OPEN_PLAN_TO_LIVING_AREA, img.AMPLE_FLOOR_SPACE, img.LARGE_MASTER_BED,
+    img.BASIC_FIXTURES, img.CLEAN_CONDITION, img.LARGE_WINDOW_PROVIDING_NAT_LIG,
+    img.MINIMAL_LANDSCAPING, img.PLANTATION_SHUTTERS, img.SHOWERTUB_CURTAIN,
+    img.TWOSTORY_FOYER, img.WOOD_DECK, img.FORMAL_DINING_SPACE, img.VANITY_STORAGE,
+    img.DISHWASHER, img.CONCRETE_PATIO, img.CEIL_FANLIGHT_FIXTURE, img.SOAKING_TUB,
+    img.MATURE_SHADE_TREES, img.LARGE_WINDOW_BLINDS, img.OPEN_FLOOR_PLAN_TO_KITCH,
+    img.LARGE_OPEN_LAWN, img.PRIVACY_FROM_TREES, img.WELLKEPT_LAWN, img.TUBSHOWER_CURTAIN,
+    img.LARGE_WINDOW_FOR_NAT_LIGHT, img.CEIL_FANLIGHT, img.CEIL_LIGHT_FIXTURE,
+    img.FRESH_PAINT, img.CEIL_FAN_LIGHT, img.NEUTRAL_PAINT_CARPET, img.OVERHEAD_LIGHT,
+    img.LARGE_WINDOWS_PROVIDING_NAT_LI, img.ATTACHED_SINGLECAR_GARAGE, img.OPEN_LAWN_AREA,
+    img.WAINSCOTING, img.SINGLESTORY_RANCH_STYLE, img.CENTER_ISLAND, img.NEUTRAL_PAINT_FIN,
+    img.AREA_RUG, img.WALLMOUNTED_TV, img.OPEN_SIGHTLINES_TO_LIVING_AREA, img.WOOD_DECKING,
+    img.STONE_FIREPLACE, img.SEATING_AREA, img.FENCED_BACKYARD, img.NEUTRAL_PAINT_PALETTE,
+    img.WASHER_DRYER_PRESENT, img.SCREENED_PORCH, img.TWOSTORY_FACADE,
+    img.MATURE_TREES_PROVIDING_SHADE, img.WINDOW_NAT_LIGHT_1,
+    img.MULTIPLE_WINDOWSNATURAL_LIGHT, img.LEVEL_LOT, img.MATURE_TREES_PROVIDING_PRIVACY,
+    img.TUBSHOWER_COMBO_CURTAIN, img.TOILET, img.HARDWOODLAMINATE_FLOOR,
+    img.LARGE_ISLAND_SEATING, img.COMMUNITY_SWIMMING_POOL, img.DECORATIVE_CHANDELIER,
+    img.COVERED_ENTRYPORCH, img.WINDOW_OVER_SINK, img.SS_DISHWASHER,
+    img.TWO_WINDOWS_PROVIDING_NAT_LIGH, img.OPEN_PLAN_TO_DINING_AREA,
+    img.ACCENT_PAINTED_WALL, img.WAINSCOTINGTRIM, img.SLIDING_GLASS_DOOR_ACCESS,
+    img.BUILTIN_CABINETRY, img.WIRE_SHELVING, img.LIMITED_LANDSCAPING,
+    img.FRENCH_DOORS_TO_EXTERIOR, img.MATURE_TREES_LANDSCAPING, img.FORMAL_DINING_SET,
+    img.CONCRETE_PATIO_SLAB, img.PRIVACY_FENCING, img.UTILITY_SINK, img.DIRECT_YARD_ACCESS,
+    img.FIREPLACE_FOCAL_POINT, img.BASEBOARD_HEATING, img.SEPARATE_TUB_SHOWER,
+    img.UPD_VANITY, img.DINING_CHANDELIER, img.OUTDOOR_DINING_AREA, img.FIREPLACE_MANTLE,
+    img.TWO_WINDOWS, img.COVERED_PORCH, img.NEUTRAL_CARPETING, img.BRICK_SIDING_FACADE,
+    img.COVERED_ENTRY, img.PRIVACY_FROM_NEIGHBORS, img.EXTERIOR_DOOR_ACCESS,
+    img.NAT_LIGHT_WINDOW, img.STAGED_FURNISHINGS, img.SIDING_EXTERIOR, img.OUTDOOR_DINING_SET,
+    img.CARPETED_LIVING_AREA, img.OUTDOOR_LIVING_SPACE, img.TWOSTORY_SINGLEFAMILY_HOME,
+    img.LARGE_FRONT_LAWN, img.LANDSCAPED_FRONT_YARD, img.SINGLE_WINDOW_PROVIDING_NAT_LI,
+    img.WHITE_CABINETS, img.LARGE_SECTIONAL_SEATING, img.STAGED_FURNITURE, img.DARK_CABINETRY,
+    img.REAR_DECK, img.SIDING_IN_CONDITION, img.WELLMAINTAINED_DECKING, img.OPEN_SIGHTLINES,
+    img.DETACHED_STORAGE_SHED, img.SEPARATE_GLASS_SHOWER, img.LARGE_LEVEL_LAWN,
+    img.LARGE_MIRROR_LIGHT, img.LIMITED_NAT_LIGHT, img.CARPETED_STAIRS, img.MASTER_BED,
+    img.MATURE_LANDSCAPINGTREES, img.SMALL_ROOM_SIZE, img.LEVEL_YARD, img.LANDSCAPING,
+    img.TWOSTORY_CURB_APPEAL, img.WOOD_LAMINATE_FLOOR, img.SLIDING_GLASS_DOOR_TO_DECK,
+    img.BAY_WINDOW, img.SLOPED_CEILINGS, img.DATED_FIXTURES, img.CHAIR_RAIL_MOLDING,
+    img.WASHERDRYER_HOOKUPS, img.WHITE_APPL, img.TWOSTORY_REAR_ELEVATION,
+    img.LANDSCAPED_SHRUBS, img.OVERHEAD_LIGHT_FIXTURE, img.LARGE_WINDOWS_SHUTTERS,
+    img.LAWN_AREA, img.TILEVINYL_FLOOR, img.ISLAND_SEATING, img.LAMINATEWOOD_FLOOR,
+    img.LIMITED_COUNTER_SPACE, img.NAT_LIGHT_FROM_WINDOW_1, img.LARGE_WALL_MIRROR,
+    img.GRILL_PRESENT, img.TWOCAR_ATTACHED_GARAGE, img.VINYLLINOLEUM_FLOOR,
+    img.MATURE_TREESSHADE, img.CLEAN_NEUTRAL_FIN, img.LAMINATEWOODLOOK_FLOOR,
+    img.FORMAL_SEATING_AREA, img.VANITY_SINK, img.DARK_WOOD_CABINETRY, img.WAINSCOTING_TRIM,
+    img.AMPLE_STORAGE, img.BREAKFAST_BAR, img.PAVER_PATIO, img.LAMINATE_COUNTERS,
+    img.SLIDING_GLASS_DOOR_TO_EXTERIOR, img.MATURE_TREE, img.CARPETED_SEATING_AREA,
+    img.WOOD_FLOORS_1, img.DATED_FIN, img.OPEN_SIGHTLINES_TO_OTHER_ROOMS, img.UPD_FIN,
+    img.WELLMAINTAINED_EXTERIOR, img.TILE_VINYL_FLOOR, img.LARGE_FRONT_WINDOW,
+    img.ACCENT_WALL_PAINT, img.NEUTRAL_TILE_FLOOR, img.TILED_FLOOR_1,
+
+    -- Census: Education
+    c.total_population_25plus,
+    c.male_bachelors_degree,
+    c.female_bachelors_degree,
+    c.pct_bachelors_degree,
+
+    -- Census: Population
+    c.total_population,
+    c.non_hispanic_white_population,
+    c.pct_white,
+
+    -- Census: Income
+    c.median_earnings_total,
+    c.median_earnings_male,
+    c.median_earnings_female,
+    c.median_household_income,
+
+    -- Census: Housing
+    c.median_home_value,
+    c.median_gross_rent,
+    c.owner_occupied_units,
+    c.renter_occupied_units,
+    c.pct_owner_occupied,
+    c.occupied_units,
+    c.vacant_units,
+
+    -- Census: Age & Employment
+    c.median_age,
+    c.civilian_employed,
+    c.civilian_unemployed,
+    c.unemployment_rate,
+
+    -- Census: Poverty
+    c.population_below_poverty,
+    c.poverty_rate,
+
+    -- Election data
+    v.county_name,
+    v.county_fips,
+    v.votes_gop,
+    v.votes_dem,
+    v.total_votes,
+    v.per_gop,
+    v.per_dem,
+    v.per_point_diff,
+    v.dem_margin,
+    v.rep_margin
+
+FROM "SCRATCH"."PUBLIC"."EXPANDED_IMAGE_DATA" img
+
+LEFT JOIN roc_public_record_data."DATATREE"."ASSESSOR" p
+    ON img.CC_LIST_ID = p.PROPERTYID
+
+LEFT JOIN census_data c
+    ON p.SITUSCENSUSTRACT = c.census_tract
+
+LEFT JOIN "SCRATCH"."DATASCIENCE"."VOTING_PATTERNS_2020" v
+    ON LEFT(p.FIPS, 5) = CAST(v.county_fips AS VARCHAR)
+
+WHERE
+    LOWER(p.SITUSSTATE) = 'nc'
+    AND p.CURRENTSALESPRICE IS NOT NULL
+    AND p.SUMLIVINGAREASQFT IS NOT NULL
+    AND p.LOTSIZESQFT IS NOT NULL
+    AND p.SITUSLATITUDE IS NOT NULL
+    AND p.SITUSLONGITUDE IS NOT NULL;
