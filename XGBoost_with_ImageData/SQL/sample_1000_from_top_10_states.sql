@@ -11,14 +11,6 @@ WITH census_data AS (
             THEN 100.0 * (SUM(a."B15002e15") + SUM(a."B15002e32")) / SUM(a."B15002e1")
         END AS pct_bachelors_degree,
 
-        -- Race / Ethnicity
-        SUM(c."B03002e1") AS total_population,
-        SUM(c."B03002e3") AS non_hispanic_white_population,
-        CASE
-            WHEN SUM(c."B03002e1") > 0
-            THEN 100.0 * SUM(c."B03002e3") / SUM(c."B03002e1")
-        END AS pct_white,
-
         -- Earnings
         AVG(d."B20002e1") AS median_earnings_total,
         AVG(d."B20002e2") AS median_earnings_male,
